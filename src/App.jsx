@@ -1,5 +1,25 @@
 import "./App.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+
+const BASE = import.meta.env.BASE_URL; // ex: "/" ou "/nome-do-repo/"
+
+const BG_MAIN = Array.from({ length: 10 }, (_, i) => {
+  const n = String(i + 1).padStart(2, "0");
+  return `${BASE}bg/main/${n}.png`;
+});
+
+const BG_HOVER_LEFT = Array.from({ length: 3 }, (_, i) => {
+  const n = String(i + 1).padStart(2, "0");
+  return `${BASE}bg/hover-left/${n}.png`;
+});
+
+const BG_HOVER_RIGHT = Array.from({ length: 3 }, (_, i) => {
+  const n = String(i + 1).padStart(2, "0");
+  return `${BASE}bg/hover-right/${n}.png`;
+});
+
+const ROTATE_MS = 3500; // velocidade da troca
+
 
 /** ====== defaults (você pode mudar depois nas Configurações) ====== */
 const DEFAULT_CATEGORIES = [
@@ -37,6 +57,97 @@ function saveJSON(key, value) {
 export default function App() {
   const [hoverSide, setHoverSide] = useState(null); // "left" | "right" | null
   const [route, setRoute] = useState("home"); // "home" | "ranking"
+
+    // ===== Background por imagens (com crossfade) =====
+  const frameSet =
+    route === "home" && hoverSide === "left"
+      ? BG_HOVER_LEFT
+      : route === "home" && hoverSide === "right"
+      ? BG_HOVER_RIGHT
+      : BG_MAIN;
+
+  const [frameIndex, setFrameIndex] = useState(0);
+const [bgA, setBgA] = useState(() => BG_MAIN[0] || "");
+const [bgB, setBgB] = useState(() => BG_MAIN[0] || "");
+const [isAActive, setIsAActive] = useState(true);
+
+// cache de loads/decodes + controle de “último pedido”
+const loadPromisesRef = useRef(new Map());
+const lastWantedRef = useRef("");
+
+function preloadAndDecode(src) {
+  if (!src) return Promise.resolve(false);
+
+  const cache = loadPromisesRef.current;
+  if (cache.has(src)) return cache.get(src);
+
+  const p = new Promise((resolve) => {
+    const img = new Image();
+    img.src = src;
+
+    if (img.decode) {
+      img.decode().then(() => resolve(true)).catch(() => resolve(false));
+    } else {
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+    }
+  });
+
+  cache.set(src, p);
+  return p;
+}
+
+async function swapTo(src) {
+  if (!src) return;
+
+  lastWantedRef.current = src;
+
+  const ok = await preloadAndDecode(src);
+  if (!ok) {
+  console.warn("[BG] falhou carregar/decodificar:", src);
+  return;
+}
+  if (lastWantedRef.current !== src) return; // pedido antigo, ignora
+
+  setIsAActive((prev) => {
+    if (prev) setBgB(src);
+    else setBgA(src);
+    return !prev;
+  });
+}
+
+
+  // preload (evita piscadas na primeira vez)
+  useEffect(() => {
+  const all = [...BG_MAIN, ...BG_HOVER_LEFT, ...BG_HOVER_RIGHT].filter(Boolean);
+  all.forEach((src) => preloadAndDecode(src));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+  // quando troca o "conjunto" (hover on/off), mantém o índice e faz um crossfade pro equivalente
+  // quando muda o “conjunto” (main/hover), só garante que o index é válido
+useEffect(() => {
+  if (!frameSet.length) return;
+  setFrameIndex((i) => i % frameSet.length);
+}, [frameSet.length]);
+
+// sempre que (set ou index) mudar, faz swap com decode-guard
+useEffect(() => {
+  if (!frameSet.length) return;
+  const src = frameSet[frameIndex % frameSet.length];
+  swapTo(src);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [frameSet, frameIndex]);
+
+
+  // roda o slideshow
+  useEffect(() => {
+  if (frameSet.length <= 1) return;
+  const id = setInterval(() => {
+    setFrameIndex((i) => (i + 1) % frameSet.length);
+  }, ROTATE_MS);
+  return () => clearInterval(id);
+}, [frameSet.length]);
 
   // dados (persistidos)
   const [teens, setTeens] = useState(() => loadJSON("md_teens", DEFAULT_TEENS));
@@ -167,20 +278,41 @@ export default function App() {
         hoverSide === "right" ? "hoverRight" : "",
       ].join(" ")}
     >
-      {/* Vídeo base (NÍTIDO sempre) */}
-      <video className="bgVideo bgVideoBase" autoPlay muted loop playsInline>
-        <source src="/background.mp4" type="video/mp4" />
-      </video>
+            {/* Base (nítida) */}
+      <div className="bgVideo bgVideoBase" aria-hidden="true">
+        <div
+          className={["bgFrame", isAActive ? "isActive" : ""].join(" ")}
+          style={{ backgroundImage: `url(${bgA})` }}
+        />
+        <div
+          className={["bgFrame", !isAActive ? "isActive" : ""].join(" ")}
+          style={{ backgroundImage: `url(${bgB})` }}
+        />
+      </div>
 
-      {/* Blur da ESQUERDA (aparece quando hover no botão direito) */}
-      <video className="bgVideo bgVideoBlurLeft" autoPlay muted loop playsInline>
-        <source src="/background.mp4" type="video/mp4" />
-      </video>
+      {/* Blur ESQUERDA (aparece quando hover no botão direito) */}
+      <div className="bgVideo bgVideoBlurLeft" aria-hidden="true">
+        <div
+          className={["bgFrame", isAActive ? "isActive" : ""].join(" ")}
+          style={{ backgroundImage: `url(${bgA})` }}
+        />
+        <div
+          className={["bgFrame", !isAActive ? "isActive" : ""].join(" ")}
+          style={{ backgroundImage: `url(${bgB})` }}
+        />
+      </div>
 
-      {/* Blur da DIREITA (aparece quando hover no botão esquerdo) */}
-      <video className="bgVideo bgVideoBlurRight" autoPlay muted loop playsInline>
-        <source src="/background.mp4" type="video/mp4" />
-      </video>
+      {/* Blur DIREITA (aparece quando hover no botão esquerdo) */}
+      <div className="bgVideo bgVideoBlurRight" aria-hidden="true">
+        <div
+          className={["bgFrame", isAActive ? "isActive" : ""].join(" ")}
+          style={{ backgroundImage: `url(${bgA})` }}
+        />
+        <div
+          className={["bgFrame", !isAActive ? "isActive" : ""].join(" ")}
+          style={{ backgroundImage: `url(${bgB})` }}
+        />
+      </div>
 
       <div className="overlay" aria-hidden="true" />
 
