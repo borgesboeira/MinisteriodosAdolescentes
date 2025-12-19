@@ -26,11 +26,17 @@ body{
 }
 
 .page{
-  min-height: 100vh;
+  min-height: 100svh; /* melhor no mobile */
   position: relative;
-  overflow: hidden; /* pode manter por causa do background fixo */
+  overflow: hidden;
   padding: 28px 18px;
 }
+
+@supports (height: 100dvh){
+  .page{ min-height: 100dvh; }
+  .bgVideo{ height: 100dvh; }
+}
+
 
 /* Espaço “céu + soldados” antes de começar o ranking */
 .page.isRanking .rankHeroSpace{
@@ -106,7 +112,8 @@ body{
 
 .bgVideoBase{
   z-index: 0;
-  transform: scale(1.0); /* quanto menor, menos “zoom” (mas não faz milagre) */
+  transform: scale(var(--lens-zoom)); /* usa a variável */
+  transform-origin: center;
   filter: saturate(1.05) contrast(1.05) brightness(.68);
 }
 
@@ -790,6 +797,8 @@ mask-size: 100% 100%;
   z-index: 3;
   padding: 70px clamp(14px, 4vw, 60px) 110px;
   background: #070A12;
+    --rankBgSize: min(2560px, 100vw) auto; /* desktop */
+  --rankBgPosY: 55%;
 }
 
 
@@ -802,8 +811,8 @@ mask-size: 100% 100%;
 
   background-image: var(--rankBgLow);
   background-repeat: no-repeat;
-  background-position: center var(--rankBgOffsetY, 0px);
-  background-size: min(2560px, 100vw) auto;
+  background-position: 50% calc(var(--rankBgPosY, 55%) + var(--rankBgOffsetY, 0px));
+background-size: var(--rankBgSize, min(2560px, 100vw) auto);
 
   opacity: 1;
 }
@@ -817,8 +826,8 @@ mask-size: 100% 100%;
 
   background-image: var(--rankBgHigh);
   background-repeat: no-repeat;
-  background-position: center var(--rankBgOffsetY, 0px);
-  background-size: min(2560px, 100vw) auto;
+  background-position: 50% calc(var(--rankBgPosY, 55%) + var(--rankBgOffsetY, 0px));
+background-size: var(--rankBgSize, min(2560px, 100vw) auto);
 
   opacity: 0;
   transition: opacity .35s ease;
@@ -841,4 +850,32 @@ mask-size: 100% 100%;
 .page.isRanking .rankPage::before,
 .page.isRanking .rankPage::after{
   pointer-events: none;
+}
+
+@media (max-width: 720px){
+  :root{
+    --lens-zoom: 1.14; /* zoom in do fundo no celular */
+  }
+
+  /* Enquadra melhor os frames do fundo no mobile */
+  .bgFrame{
+    background-position: 50% 50%;
+  }
+
+  /* Ranking: ocupa a tela e dá crop bonito (sem “sobras”) */
+  .page.isRanking .rankPage{
+    --rankBgSize: cover; /* aqui é o “caber direitinho” */
+    --rankBgPosY: 50%;   /* ajuste fino do foco */
+  }
+
+  /* safe-area (notch) sem dor */
+  .topLeftTitle{
+    top: calc(env(safe-area-inset-top) + 12px);
+    left: calc(env(safe-area-inset-left) + 12px);
+  }
+  .optionsPremium{
+    bottom: calc(env(safe-area-inset-bottom) + 18px);
+    padding: 0 14px;
+    gap: 14px;
+  }
 }
