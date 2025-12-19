@@ -9,6 +9,11 @@
 
   --shadow: 0 20px 70px rgba(0,0,0,.55);
   --shadow2: 0 10px 30px rgba(0,0,0,.35);
+
+/* LENTE (como antes) */
+--lens-pad: clamp(10px, 2.2vw, 26px);
+--lens-radius: clamp(18px, 2.4vw, 36px);
+--lens-zoom: 1.03; /* levemente zoom in */
 }
 
 *{ box-sizing: border-box; }
@@ -23,24 +28,37 @@ body{
 .page{
   min-height: 100vh;
   position: relative;
-  overflow: hidden;
+  overflow: hidden; /* pode manter por causa do background fixo */
   padding: 28px 18px;
 }
 
+/* Espaço “céu + soldados” antes de começar o ranking */
+.page.isRanking .rankHeroSpace{
+  height: clamp(600px, 32vh, 700px); /* ajuste até “bater” na terra */
+}
 
-
+/* no ranking, sem padding externo pra imagem ir até as bordas */
+.page.isRanking{
+  padding: 0;
+}
 
 /* =========================
    VÍDEO
    ========================= */
+/* FUNDO: full-bleed (sem borda, sem raio, sem sombra) */
 .bgVideo{
-  position: absolute;
+  position: fixed;   /* mais garantido que absolute */
   inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none; /* importante: não bloquear cliques */
-  background: transparent; /* blur não pode “blackoutar” */
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  border-radius: 0;
+  overflow: hidden;
+  box-shadow: none;
 }
+
+
+
 
 .bgVideoBase{
   background: var(--bg); /* só o base tem fallback */
@@ -66,7 +84,7 @@ body{
   z-index: 0;
 
   /* transição suave */
-  transition: opacity 1.15s cubic-bezier(.2,.8,.2,1);
+  transition: opacity 1.35s ease-in-out;
   will-change: opacity;
 
   /* evita “flash” escuro se a imagem demorar 1 frame pra aparecer */
@@ -77,20 +95,19 @@ body{
 .bgFrame.isActive{
   opacity: 1;
   z-index: 1;
-  transition-delay: 0s;
 }
 
-/* a antiga espera um pouco antes de começar a sumir (evita escurecer) */
-.bgFrame:not(.isActive){
-  transition-delay: 0.18s;
+.bgVideoBase .bgFrame{
+  transform: none !important;
+  transform-origin: center;
+  will-change: opacity, transform;
 }
-
 
 
 .bgVideoBase{
   z-index: 0;
   transform: scale(1.0); /* quanto menor, menos “zoom” (mas não faz milagre) */
-  filter: saturate(1.05) contrast(1.05) brightness(.78);
+  filter: saturate(1.05) contrast(1.05) brightness(.68);
 }
 
 /* Base comum dos vídeos borrados */
@@ -168,15 +185,16 @@ mask-size: 100% 100%;
 .page.hoverRight .bgVideoBlurLeft{ opacity: .92; }
 
 .overlay{
-  position: absolute;
+  position: fixed;   /* idem */
   inset: 0;
+  border-radius: 0;
+  pointer-events: none;
   z-index: 2;
-  background:
-    radial-gradient(1200px 700px at 20% 20%, rgba(120, 170, 255, .18), transparent 60%),
-    radial-gradient(900px 600px at 80% 30%, rgba(255, 210, 120, .12), transparent 55%),
-    radial-gradient(900px 700px at 50% 80%, rgba(160, 120, 255, .12), transparent 60%),
-    linear-gradient(to bottom, rgba(0,0,0,.35), rgba(0,0,0,.72));
+  background: linear-gradient(to bottom, rgba(0,0,0,.30), rgba(0,0,0,.60));
 }
+
+
+
 
 /* =========================
    HEADER
@@ -203,85 +221,230 @@ mask-size: 100% 100%;
 }
 
 /* =========================
-   OPÇÕES (esq / dir)
+   OPÇÕES (esq / dir) — PREMIUM
    ========================= */
-.options{
+
+.optionsPremium{
   position: absolute;
   z-index: 3;
-
   left: 0;
   right: 0;
-  bottom: clamp(18px, 4vh, 40px);
+  bottom: clamp(18px, 4vh, 44px);
 
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px;
+  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  gap: 22px;
 
-  padding: 0 clamp(14px, 4vw, 60px);
+  padding: 0 clamp(16px, 4vw, 64px);
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
-.optionCard{
-  width: min(420px, 100%);
-  padding: 18px 18px;
-  border-radius: 18px;
+.optionPremium{
+  position: relative;
+  overflow: hidden;
 
-  background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.06));
+  min-height: 140px;
+  padding: 18px 20px 16px;
+  border-radius: 22px;
+
+  background: linear-gradient(180deg, rgba(255,255,255,.12), rgba(0,0,0,.22));
   border: 1px solid rgba(255,255,255,.16);
-  box-shadow: var(--shadow2);
-  backdrop-filter: blur(10px);
+  box-shadow: 0 18px 55px rgba(0,0,0,.45);
 
-  color: var(--text);
-  text-align: left;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
+  color: rgba(255,255,255,.92);
   cursor: pointer;
 
-  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+  display: grid;
+  gap: 10px;
+
+  transform: translateZ(0);
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease;
 }
 
-.optionLeft{ justify-self: start; }
-.optionRight{ justify-self: end; text-align: right; }
+.optionLeft.optionPremium{
+  --a1: rgba(120, 170, 255, .85);
+  --a2: rgba(180, 140, 255, .55);
+  text-align: left;
+}
+.optionRight.optionPremium{
+  --a1: rgba(255, 210, 120, .85);
+  --a2: rgba(120, 170, 255, .55);
+  text-align: right;
+}
+
+.optionTopRow{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
 
 .optionKicker{
-  font-size: 12px;
+  font-size: 11px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.70);
+}
+
+.optionBadge{
+  font-size: 11px;
   letter-spacing: .18em;
   text-transform: uppercase;
-  color: rgba(255,255,255,.72);
-  margin-bottom: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.14);
+  color: rgba(255,255,255,.80);
+}
+.optionBadgeLive{
+  background: rgba(120,170,255,.10);
+  border-color: rgba(120,170,255,.24);
 }
 
 .optionTitle{
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
+  font-size: 22px;
+  font-weight: 850;
+  letter-spacing: -0.02em;
 }
 
-.optionCard:hover{
-  transform: translateY(-3px);
-  border-color: rgba(255,255,255,.28);
-  background: linear-gradient(180deg, rgba(255,255,255,.15), rgba(255,255,255,.08));
+.optionDesc{
+  font-size: 13px;
+  color: rgba(255,255,255,.72);
 }
 
-.page.hoverLeft .optionLeft,
-.page.hoverRight .optionRight{
-  border-color: rgba(120,170,255,.40);
+.optionCTA{
+  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  font-size: 13px;
+  font-weight: 750;
+  color: rgba(255,255,255,.86);
+}
+.optionRight.optionPremium .optionCTA{
+  justify-content: flex-end;
 }
 
-@keyframes floatIn{
-  from { opacity: 0; transform: translateX(-50%) translateY(12px) scale(.98); }
-  to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+.optionArrow{
+  display: inline-block;
+  transform: translateX(0);
+  transition: transform .18s ease;
+}
+
+.optionPremium::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg, var(--a1), var(--a2), rgba(255,255,255,.12));
+  opacity: .55;
+  pointer-events: none;
+
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+  linear-gradient(#000 0 0) content-box,
+  linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.optionPremium::after{
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+
+  background: radial-gradient(520px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(255,255,255,.18),
+    rgba(255,255,255,0) 55%
+  );
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+
+.optionSheen{
+  position: absolute;
+  inset: -40%;
+  pointer-events: none;
+  opacity: 0;
+
+  background: linear-gradient(
+    120deg,
+    transparent 40%,
+    rgba(255,255,255,.16) 50%,
+    transparent 60%
+  );
+  transform: translateX(-65%) rotate(8deg);
+}
+
+@keyframes sheenPass{
+  from { transform: translateX(-65%) rotate(8deg); }
+  to   { transform: translateX(65%)  rotate(8deg); }
+}
+
+.optionPremium:hover{
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(255,255,255,.22);
+  box-shadow:
+    0 24px 80px rgba(0,0,0,.55),
+    0 0 0 1px rgba(255,255,255,.08) inset;
+}
+.optionPremium:hover::after{ opacity: 1; }
+.optionPremium:hover .optionSheen{
+  opacity: 1;
+  animation: sheenPass 1.05s ease;
+}
+.optionPremium:hover .optionArrow{ transform: translateX(4px); }
+
+.optionPremium:active{
+  transform: translateY(-2px) scale(.995);
+}
+
+.optionPremium:focus-visible{
+  outline: none;
+  box-shadow:
+    0 24px 80px rgba(0,0,0,.55),
+    0 0 0 4px rgba(120,170,255,.22);
+}
+
+.page.hoverLeft .optionRight.optionPremium{
+  opacity: .78;
+  transform: translateY(-1px) scale(.995);
+}
+.page.hoverRight .optionLeft.optionPremium{
+  opacity: .78;
+  transform: translateY(-1px) scale(.995);
 }
 
 @media (max-width: 720px){
-  .headerCard{ bottom: 170px; }
-  .options{ grid-template-columns: 1fr; }
-  .optionLeft, .optionRight{ justify-self: stretch; text-align: left; }
+  .optionsPremium{
+    grid-template-columns: 1fr;
+  }
+  .optionRight.optionPremium{
+    text-align: left;
+  }
+  .optionRight.optionPremium .optionCTA{
+    justify-content: flex-start;
+  }
 }
 
-/* ===== Ranking ===== */
-.rankPage{
-  position: relative;
-  z-index: 3;
-  padding: 70px clamp(14px, 4vw, 60px) 110px;
+/* altura mínima pra imagem caber inteira */
+.page.isRanking .rankPage{
+  --bgW: min(2560px, 100vw);
+  --bgH: calc(var(--bgW) * var(--rankBgRatio, 3.125));
+  --offsetFix: max(calc(var(--rankBgOffsetY, 0px) * -1), 0px);
+  min-height: max(100vh, calc(var(--bgH) + var(--offsetFix)));
 }
+
 
 .rankTopBar{
   display: flex;
@@ -323,6 +486,7 @@ mask-size: 100% 100%;
   color: rgba(255,255,255,.72);
   font-size: 13px;
 }
+
 
 .addTeenRow{
   display: flex;
@@ -603,4 +767,78 @@ mask-size: 100% 100%;
   .bulkRow{
     grid-template-columns: 1fr;
   }
+}
+
+.rankHeroImg{
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 18px 50px rgba(0,0,0,.55));
+}
+
+
+/* garante que o conteúdo fique na frente das texturas */
+.rankWorld > *{
+  position: relative;
+  z-index: 1;
+}
+
+/* (quando quiser água depois, a gente ativa com uma classe e um ::after) */
+
+.rankPage{
+  position: relative;
+  z-index: 3;
+  padding: 70px clamp(14px, 4vw, 60px) 110px;
+  background: #070A12;
+}
+
+
+/* CAMADA 1: WEBP (aparece primeiro) */
+.page.isRanking .rankPage::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:0;
+
+  background-image: var(--rankBgLow);
+  background-repeat: no-repeat;
+  background-position: center var(--rankBgOffsetY, 0px);
+  background-size: min(2560px, 100vw) auto;
+
+  opacity: 1;
+}
+
+/* CAMADA 2: PNG (entra depois, mais nítido) */
+.page.isRanking .rankPage::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  z-index:0;
+
+  background-image: var(--rankBgHigh);
+  background-repeat: no-repeat;
+  background-position: center var(--rankBgOffsetY, 0px);
+  background-size: min(2560px, 100vw) auto;
+
+  opacity: 0;
+  transition: opacity .35s ease;
+  will-change: opacity;
+}
+
+/* quando o PNG estiver pronto, faz crossfade por cima */
+.page.isRanking.rankPngReady .rankPage::after{
+  opacity: 1;
+}
+
+/* sombreado por cima das imagens (pra leitura) */
+.page.isRanking .rankPage{
+  isolation: isolate; /* garante pilha de camadas */
+}
+.page.isRanking .rankPage > *{
+  position: relative;
+  z-index: 2;
+}
+.page.isRanking .rankPage::before,
+.page.isRanking .rankPage::after{
+  pointer-events: none;
 }
