@@ -1,7 +1,7 @@
 import "./App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const BASE = import.meta.env.BASE_URL; // ex: "/" ou "/nome-do-repo/"
+const BASE = import.meta.env.BASE_URL; // ex t: "/" ou "/nome-do-repo/"
 
 const BG_MAIN = Array.from({ length: 17 }, (_, i) => {
   const n = String(i + 1).padStart(2, "0");
