@@ -690,7 +690,7 @@ mask-size: 100% 100%;
 .modalOverlay{
   position: fixed;
   inset: 0;
-  z-index: 10;
+  z-index: 9999;              /* <- bem acima de tudo */
   background: rgba(0,0,0,.55);
   display: grid;
   place-items: center;
@@ -702,10 +702,11 @@ mask-size: 100% 100%;
   border-radius: 18px;
   background: rgba(20,24,34,.92);
   border: 1px solid rgba(255,255,255,.14);
-  box-shadow: var(--shadow);
+  box-shadow: 0 20px 70px rgba(0,0,0,.55);
   backdrop-filter: blur(10px);
   padding: 14px;
 }
+
 
 .modalHeader{
   display: flex;
@@ -879,3 +880,81 @@ background-size: var(--rankBgSize, min(2560px, 100vw) auto);
     gap: 14px;
   }
 }
+
+/* ===== Ranking: topbar legível + sem blur exagerado ===== */
+
+/* barra do topo clara, com texto preto */
+.page.isRanking .rankTopBar{
+  position: sticky;
+  top: 0;
+  z-index: 6;
+
+  margin: 0;
+  padding: 12px clamp(14px, 4vw, 60px);
+
+  background: transparent;     /* <- transparente */
+  border-bottom: none;         /* <- sem borda */
+  backdrop-filter: none;       /* <- sem blur */
+}
+
+
+/* botões do topo (texto preto) */
+.page.isRanking .rankTopBar .smallBtn,
+.page.isRanking .rankTopBar .tinyBtn{
+  background: transparent;
+  border: 1px solid rgba(0,0,0,.18);
+  color: rgba(0,0,0,.88);
+}
+
+.page.isRanking .rankTopBar .smallBtn:hover,
+.page.isRanking .rankTopBar .tinyBtn:hover{
+  background: rgba(0,0,0,.10);
+  border-color: rgba(0,0,0,.26);
+}
+
+.page.isRanking .rankTopBar .smallBtnPrimary{
+  background: rgba(120,170,255,.35);
+  border-color: rgba(40,70,170,.30);
+  color: rgba(0,0,0,.88);
+}
+
+.page.isRanking .rankTopBar .dangerBtn{
+  background: rgba(255,120,120,.22);
+  border-color: rgba(140,30,30,.22);
+  color: rgba(0,0,0,.88);
+}
+
+/* tira o “embaçado” do ranking */
+.page.isRanking .rankCard{
+  background: rgba(10,12,20,.70);
+  border: 1px solid rgba(255,255,255,.14);
+  backdrop-filter: none; /* <- adeus blur */
+}
+
+/* linhas do ranking um pouco mais “firmes” */
+.page.isRanking .rankRow{
+  background: rgba(0,0,0,.26);
+  border: 1px solid rgba(255,255,255,.12);
+}
+
+/* painel inline das configurações */
+.settingsInline{
+  margin: 10px 6px 6px;
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.12);
+}
+
+.settingsInlineHeader{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.settingsInlineTitle{
+  font-weight: 900;
+}
+

@@ -1,5 +1,8 @@
 import "./App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { db } from "./lib/firebase";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+
 
 const BASE = import.meta.env.BASE_URL; // ex: "/" ou "/nome-do-repo/"
 
@@ -263,7 +266,9 @@ async function swapTo(src) {
 
 useEffect(() => {
   const all = [...BG_MAIN, ...BG_HOVER_LEFT, ...BG_HOVER_RIGHT, RANKING_BG_WEBP, RANKING_BG_PNG].filter(Boolean);
-  all.forEach((src) => preloadAndDecode(src, 2));
+  all.forEach((src) => {
+  preloadAndDecode(src, 2).catch(() => {});
+});
 }, []);
 
 
@@ -316,6 +321,35 @@ useEffect(() => {
   const [bulkMarks, setBulkMarks] = useState({}); // { [id]: { [catKey]: boolean } }
   const [showSettings, setShowSettings] = useState(false);
   const [newTeenName, setNewTeenName] = useState("");
+
+    // ===== Admin (login simples por PIN) =====
+  const ADMIN_PIN = String(import.meta.env.VITE_ADMIN_PIN || "1234");
+
+  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem("md_isAdmin") === "1");
+  const [showLogin, setShowLogin] = useState(false);
+  const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState("");
+
+  function doLogin() {
+    if (pin.trim() === ADMIN_PIN) {
+      setIsAdmin(true);
+      localStorage.setItem("md_isAdmin", "1");
+      setShowLogin(false);
+      setPin("");
+      setPinError("");
+      return;
+    }
+    setPinError("PIN incorreto.");
+  }
+
+  function doLogout() {
+    setIsAdmin(false);
+    localStorage.removeItem("md_isAdmin");
+    setBulkMode(false);
+    setBulkMarks({});
+    setShowSettings(false);
+  }
+
 
   // persistência
   useEffect(() => saveJSON("md_teens", teens), [teens]);
@@ -512,7 +546,9 @@ useEffect(() => {
     type="button"
     onMouseEnter={() => {
   setHoverSide("right");
-  preloadAndDecode(RANKING_BG_WEBP, 2).then(() => preloadAndDecode(RANKING_BG_PNG, 1));
+  preloadAndDecode(RANKING_BG_WEBP, 2)
+  .then(() => preloadAndDecode(RANKING_BG_PNG, 1))
+  .catch(() => {});
 }}
 
     onMouseLeave={(e) => {
@@ -555,35 +591,90 @@ useEffect(() => {
 
 >
           <div className="rankTopBar">
-            <button className="smallBtn" type="button" onClick={() => setRoute("home")}>
-              ← Voltar
-            </button>
+  <button className="smallBtn" type="button" onClick={() => setRoute("home")}>
+    ← Voltar
+  </button>
 
-            <div className="rankActions">
-              <button
-                className={["smallBtn", bulkMode ? "smallBtnActive" : ""].join(" ")}
-                type="button"
-                onClick={() => {
-                  // garante formato antes de marcar
-                  for (const t of teens) ensureTeenScoreShape(t.id);
-                  setBulkMode((v) => !v);
-                  setBulkMarks({});
-                }}
-              >
-                {bulkMode ? "Cancelar" : "Adicionar pontos"}
-              </button>
+{showLogin && (
+  <div className="modalOverlay" role="dialog" aria-modal="true">
+    <div className="modalCard">
+      <div className="modalHeader">
+        <div className="modalTitle">Login (Admin)</div>
+        <button className="tinyBtn" type="button" onClick={() => setShowLogin(false)}>
+          fechar
+        </button>
+      </div>
 
-              {bulkMode ? (
-                <button className="smallBtn smallBtnPrimary" type="button" onClick={applyBulkPoints}>
-                  Aplicar
-                </button>
-              ) : (
-                <button className="smallBtn" type="button" onClick={() => setShowSettings(true)}>
-                  Configurações
-                </button>
-              )}
+      <div className="settingsGrid">
+        <div className="settingsRow" style={{ gridTemplateColumns: "1fr" }}>
+          <div className="settingsLabel">Digite o PIN</div>
+
+          <input
+            className="numInput"
+            type="password"
+            inputMode="numeric"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") doLogin();
+            }}
+            placeholder="••••"
+          />
+
+          {pinError ? (
+            <div style={{ color: "rgba(255,140,140,.95)", fontSize: 13 }}>
+              {pinError}
             </div>
-          </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="modalFooter">
+        <button className="smallBtn smallBtnPrimary" type="button" onClick={doLogin}>
+          Entrar
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+  <div className="rankActions">
+    {!isAdmin ? (
+      <button className="smallBtn smallBtnPrimary" type="button" onClick={() => setShowLogin(true)}>
+        Login
+      </button>
+    ) : (
+      <>
+        <button className="smallBtn" type="button" onClick={doLogout}>
+          Sair
+        </button>
+
+        <button
+          className={["smallBtn", bulkMode ? "smallBtnActive" : ""].join(" ")}
+          type="button"
+          onClick={() => {
+            for (const t of teens) ensureTeenScoreShape(t.id);
+            setBulkMode((v) => !v);
+            setBulkMarks({});
+          }}
+        >
+          {bulkMode ? "Cancelar" : "Adicionar pontos"}
+        </button>
+
+        {bulkMode ? (
+          <button className="smallBtn smallBtnPrimary" type="button" onClick={applyBulkPoints}>
+            Aplicar
+          </button>
+        ) : (
+          <button className="smallBtn" type="button" onClick={() => setShowSettings((v) => !v)}>
+            Configurações
+          </button>
+        )}
+      </>
+    )}
+  </div>
+</div>
+
 {/* HERO do ranking (imagem estática) */}
 <div className="rankHeroSpace" aria-hidden="true" />
           <section className="rankCard">
@@ -595,7 +686,37 @@ useEffect(() => {
         : "Ranking atualizado automaticamente conforme você soma pontos."}
     </div>
   </div>
+{isAdmin && showSettings && !bulkMode && (
+  <div className="settingsInline">
+    <div className="settingsInlineHeader">
+      <div className="settingsInlineTitle">Configurações de Pontuação</div>
+      <button className="tinyBtn" type="button" onClick={() => setShowSettings(false)}>
+        fechar
+      </button>
+    </div>
 
+    <div className="settingsGrid">
+      {categories.map((c) => (
+        <div key={c.key} className="settingsRow">
+          <div className="settingsLabel">{c.label}</div>
+          <input
+            className="numInput"
+            type="number"
+            value={categoryPoints[c.key] ?? c.defaultPoints}
+            onChange={(e) =>
+              setCategoryPoints((prev) => ({
+                ...(prev || {}),
+                [c.key]: Number(e.target.value),
+              }))
+            }
+          />
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+{isAdmin && (
   <div className="addTeenRow">
     <input
       className="textInput"
@@ -615,6 +736,8 @@ useEffect(() => {
       Zerar pontos
     </button>
   </div>
+)}
+
 
   {bulkMode ? (
     <div className="bulkGrid">
@@ -683,56 +806,29 @@ useEffect(() => {
               ))}
             </div>
 
-            <button className="tinyBtn dangerBtn" type="button" onClick={() => removeTeen(t.id)}>
-              remover
-            </button>
+            {isAdmin && (
+  <button className="tinyBtn dangerBtn" type="button" onClick={() => removeTeen(t.id)}>
+    remover
+  </button>
+)}
+
           </div>
         ))
       )}
     </div>
   )}
 </section>
-
-
-          {showSettings ? (
-            <div className="modalOverlay" role="dialog" aria-modal="true">
-              <div className="modalCard">
-                <div className="modalHeader">
-                  <div className="modalTitle">Configurações de Pontuação</div>
-                  <button className="tinyBtn" type="button" onClick={() => setShowSettings(false)}>
-                    fechar
-                  </button>
-                </div>
-
-                <div className="settingsGrid">
-                  {categories.map((c) => (
-                    <div key={c.key} className="settingsRow">
-                      <div className="settingsLabel">{c.label}</div>
-                      <input
-                        className="numInput"
-                        type="number"
-                        value={categoryPoints[c.key] ?? c.defaultPoints}
-                        onChange={(e) =>
-                          setCategoryPoints((prev) => ({
-                            ...(prev || {}),
-                            [c.key]: Number(e.target.value),
-                          }))
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="modalFooter">
-                  <button className="smallBtn smallBtnPrimary" type="button" onClick={() => setShowSettings(false)}>
-                    OK
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
+        
         </main>
       )}
     </div>
   );
+}
+
+async function testFirestore() {
+  const ref = doc(db, "debug", "hello");
+  await setDoc(ref, { msg: "salve do Firestore", at: Date.now() });
+
+  const snap = await getDoc(ref);
+  console.log("Firestore leu:", snap.data());
 }
