@@ -1,7 +1,7 @@
 import "./App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const BASE = import.meta.env.BASE_URL; // ex t: "/" ou "/nome-do-repo/"
+const BASE = import.meta.env.BASE_URL; // ex: "/" ou "/nome-do-repo/"
 
 const BG_MAIN = Array.from({ length: 17 }, (_, i) => {
   const n = String(i + 1).padStart(2, "0");
@@ -261,13 +261,11 @@ async function swapTo(src) {
   });
 }
 
-
-  // preload (evita piscadas na primeira vez)
-  useEffect(() => {
+useEffect(() => {
   const all = [...BG_MAIN, ...BG_HOVER_LEFT, ...BG_HOVER_RIGHT, RANKING_BG_WEBP, RANKING_BG_PNG].filter(Boolean);
-  all.forEach((src) => preloadAndDecode(src, 2)); // 2 tentativas
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  all.forEach((src) => preloadAndDecode(src, 2));
 }, []);
+
 
   // quando troca o "conjunto" (hover on/off), mantém o índice e faz um crossfade pro equivalente
   // quando muda o “conjunto” (main/hover), só garante que o index é válido
