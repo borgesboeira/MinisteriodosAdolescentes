@@ -581,15 +581,14 @@ useEffect(() => {
 </div>
 
       ) : (
-        <main
+       <main
   className="rankPage"
   style={{
-  "--rankBgLow": `url(${RANKING_BG_WEBP})`,
-  "--rankBgHigh": `url(${RANKING_BG_PNG})`,
-  "--rankBgOffsetY": "-110px",
-}}
-
+    "--rankBgLow": `url(${RANKING_BG_WEBP})`,
+    "--rankBgHigh": `url(${RANKING_BG_PNG})`,
+  }}
 >
+
           <div className="rankTopBar">
   <button className="smallBtn" type="button" onClick={() => setRoute("home")}>
     ← Voltar

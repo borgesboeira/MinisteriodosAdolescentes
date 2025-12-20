@@ -445,12 +445,16 @@ mask-size: 100% 100%;
 }
 
 /* altura mínima pra imagem caber inteira */
-.page.isRanking .rankPage{
-  --bgW: min(2560px, 100vw);
-  --bgH: calc(var(--bgW) * var(--rankBgRatio, 3.125));
-  --offsetFix: max(calc(var(--rankBgOffsetY, 0px) * -1), 0px);
-  min-height: max(100vh, calc(var(--bgH) + var(--offsetFix)));
+/* Desktop: pode manter a “imagem inteira” */
+@media (min-width: 721px){
+  .page.isRanking .rankPage{
+    --bgW: min(2560px, 100vw);
+    --bgH: calc(var(--bgW) * var(--rankBgRatio, 3.125));
+    --offsetFix: max(calc(var(--rankBgOffsetY, 0px) * -1), 0px);
+    min-height: max(100vh, calc(var(--bgH) + var(--offsetFix)));
+  }
 }
+
 
 
 .rankTopBar{
@@ -879,6 +883,52 @@ background-size: var(--rankBgSize, min(2560px, 100vw) auto);
     padding: 0 14px;
     gap: 14px;
   }
+@media (max-width: 720px){
+
+  /* HOME: dá mais “zoom premium” no fundo */
+  :root{
+    --lens-zoom: 1.22; /* antes era 1.14 — aumenta o preenchimento */
+  }
+
+  /* Ranking: não queremos “imagem inteira”, queremos cover (capa) */
+  .page.isRanking .rankPage{
+    min-height: 100dvh;           /* ocupa a tela */
+    --rankBgSize: cover;          /* crop/zoom */
+    --rankBgPosY: 48%;            /* ajuste fino do foco */
+    --rankBgOffsetY: 0px;         /* sem puxar pra cima no mobile */
+    padding:
+      calc(env(safe-area-inset-top) + 64px)
+      14px
+      calc(env(safe-area-inset-bottom) + 96px);
+  }
+
+  /* Faz o fundo do ranking virar um “wallpaper” fixo (bem premium no celular) */
+  .page.isRanking .rankPage::before,
+  .page.isRanking .rankPage::after{
+    position: fixed;
+    inset: 0;
+    background-size: cover;
+    background-position: 50% var(--rankBgPosY, 48%);
+  }
+
+  /* O espaço do “hero” no topo fica menor no celular (pra não parecer um retângulo gigante) */
+  .page.isRanking .rankHeroSpace{
+    height: clamp(180px, 22vh, 280px);
+  }
+
+  /* Botões mais “touch-friendly” no celular */
+  .page.isRanking .rankTopBar .smallBtn{
+    padding: 12px 14px;
+    border-radius: 14px;
+  }
+
+  /* Um carinho extra: tira highlight feio de toque */
+  button{
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
+
 }
 
 /* ===== Ranking: topbar legível + sem blur exagerado ===== */
