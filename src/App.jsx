@@ -134,6 +134,76 @@ useEffect(() => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, []);
 
+useEffect(() => {
+  if (route !== "ranking") return;
+
+  const isTouch = window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+if (!isTouch) return;
+
+  const root = document.documentElement;
+  let raf = 0;
+
+  const strength = 0.32; // quanto desloca por pixel de scroll
+  let maxShift = 260;    // será recalculado
+  let pad = 900;         // será recalculado
+
+  const readZoom = () => {
+    const z = parseFloat(getComputedStyle(root).getPropertyValue("--rankBgZoom"));
+    return Number.isFinite(z) && z > 1 ? z : 2.0; // fallback
+  };
+
+  const recalc = () => {
+    const zoom = readZoom();
+
+    // ✅ quanto "sobra" de imagem com zoom (aprox). Com zoom 2, dá ~1 tela extra.
+    const ratio = parseFloat(getComputedStyle(root).getPropertyValue("--rankBgRatio")) || 3.125;
+const vw = window.innerWidth;
+const vh = window.innerHeight;
+
+/* altura real da imagem “cover” antes do zoom */
+const coverH = Math.max(vh, vw * ratio);
+
+/* depois do zoom, quanto sobra além da tela */
+maxShift = Math.max(260, Math.round(coverH * zoom - vh));
+
+
+    // ✅ cria scroll extra suficiente pra atingir o maxShift
+    pad = Math.ceil(maxShift / strength) + 240;
+
+    root.style.setProperty("--rankScrollPad", `${pad}px`);
+  };
+
+  const tick = () => {
+    const y = window.scrollY || 0;
+
+    // ✅ conforme você rola pra baixo, você "vai descendo" na imagem (vê partes mais de baixo)
+    const shift = Math.min(maxShift, Math.round(y * strength));
+    root.style.setProperty("--rankBgParallax", `${-shift}px`);
+  };
+
+  const onScroll = () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(tick);
+  };
+
+  recalc();
+  tick();
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", recalc);
+
+  return () => {
+    window.removeEventListener("scroll", onScroll);
+    window.removeEventListener("resize", recalc);
+    cancelAnimationFrame(raf);
+    root.style.removeProperty("--rankBgParallax");
+    root.style.removeProperty("--rankScrollPad");
+  };
+}, [route]);
+
+
+
+
 
 
 
@@ -818,6 +888,9 @@ useEffect(() => {
   )}
 </section>
         
+<div className="rankScrollPad" aria-hidden="true" />
+
+
         </main>
       )}
     </div>

@@ -857,78 +857,12 @@ background-size: var(--rankBgSize, min(2560px, 100vw) auto);
   pointer-events: none;
 }
 
-@media (max-width: 720px){
-  :root{
-    --lens-zoom: 1.14; /* zoom in do fundo no celular */
-  }
-
-  /* Enquadra melhor os frames do fundo no mobile */
-  .bgFrame{
-    background-position: 50% 50%;
-  }
-
-  /* Ranking: ocupa a tela e dá crop bonito (sem “sobras”) */
-  .page.isRanking .rankPage{
-    --rankBgSize: cover; /* aqui é o “caber direitinho” */
-    --rankBgPosY: 50%;   /* ajuste fino do foco */
-  }
-
-  /* safe-area (notch) sem dor */
-  .topLeftTitle{
-    top: calc(env(safe-area-inset-top) + 12px);
-    left: calc(env(safe-area-inset-left) + 12px);
-  }
-  .optionsPremium{
-    bottom: calc(env(safe-area-inset-bottom) + 18px);
-    padding: 0 14px;
-    gap: 14px;
-  }
-@media (max-width: 720px){
-
-  /* HOME: dá mais “zoom premium” no fundo */
-  :root{
-    --lens-zoom: 1.22; /* antes era 1.14 — aumenta o preenchimento */
-  }
-
-  /* Ranking: não queremos “imagem inteira”, queremos cover (capa) */
-  .page.isRanking .rankPage{
-    min-height: 100dvh;           /* ocupa a tela */
-    --rankBgSize: cover;          /* crop/zoom */
-    --rankBgPosY: 48%;            /* ajuste fino do foco */
-    --rankBgOffsetY: 0px;         /* sem puxar pra cima no mobile */
-    padding:
-      calc(env(safe-area-inset-top) + 64px)
-      14px
-      calc(env(safe-area-inset-bottom) + 96px);
-  }
-
-  /* Faz o fundo do ranking virar um “wallpaper” fixo (bem premium no celular) */
-  .page.isRanking .rankPage::before,
-  .page.isRanking .rankPage::after{
-    position: fixed;
-    inset: 0;
-    background-size: cover;
-    background-position: 50% var(--rankBgPosY, 48%);
-  }
-
-  /* O espaço do “hero” no topo fica menor no celular (pra não parecer um retângulo gigante) */
-  .page.isRanking .rankHeroSpace{
-    height: clamp(180px, 22vh, 280px);
-  }
-
-  /* Botões mais “touch-friendly” no celular */
-  .page.isRanking .rankTopBar .smallBtn{
-    padding: 12px 14px;
-    border-radius: 14px;
-  }
-
-  /* Um carinho extra: tira highlight feio de toque */
-  button{
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-}
-
+/* ✅ WEBP + PNG sempre sincronizados */
+.page.isRanking .rankPage::before,
+.page.isRanking .rankPage::after{
+  transform: translate3d(0, var(--rankBgParallax, 0px), 0) scale(var(--rankBgZoom, 1));
+  transform-origin: 50% 0%; /* topo */
+  will-change: transform, opacity;
 }
 
 /* ===== Ranking: topbar legível + sem blur exagerado ===== */
@@ -1008,3 +942,78 @@ background-size: var(--rankBgSize, min(2560px, 100vw) auto);
   font-weight: 900;
 }
 
+.rankScrollPad{ height: 0; }
+
+@media (max-width: 720px){
+  .page.isRanking .rankScrollPad{
+    height: var(--rankScrollPad, 900px);
+  }
+}
+
+
+@media (max-width: 720px){
+
+  /* HOME */
+  :root{
+    --lens-zoom: 1.22;
+  }
+
+  .bgFrame{
+    background-position: 50% 50%;
+  }
+
+  /* RANKING: “ancorado no topo” no celular */
+  .page.isRanking .rankPage{
+    min-height: 100dvh;
+    --rankBgSize: cover;
+    --rankBgZoom: 2.00;
+
+    --rankBgPosY: 0%;       /* 👈 posição do background no topo */
+    --rankBgOriginY: 0%;    /* 👈 origem do zoom no topo */
+    --rankBgOffsetY: 0px;
+
+    padding:
+      calc(env(safe-area-inset-top) + 64px)
+      14px
+      calc(env(safe-area-inset-bottom) + 96px);
+  }
+
+  /* fundo “wallpaper” fixo no mobile */
+  .page.isRanking .rankPage::before,
+  .page.isRanking .rankPage::after{
+    position: fixed;
+    inset: 0;
+
+    /* 👇 garante topo mesmo se outra regra estiver vencendo */
+    background-size: cover;
+    @media (max-width: 720px){
+  .page.isRanking .rankPage{
+    --rankBgPosY: 0%;   /* começa no topo */
+  }
+
+  .page.isRanking .rankPage::before,
+  .page.isRanking .rankPage::after{
+    /* ✅ em vez de mover o elemento, move a imagem dentro dele */
+    background-position: 50% calc(var(--rankBgPosY, 0%) + var(--rankBgParallax, 0px));
+
+    /* ✅ zoom continua */
+    transform: scale(var(--rankBgZoom, 1));
+    transform-origin: 50% 0%;
+  }
+}
+  }
+
+  .page.isRanking .rankHeroSpace{
+    height: clamp(180px, 22vh, 280px);
+  }
+
+  .page.isRanking .rankTopBar .smallBtn{
+    padding: 12px 14px;
+    border-radius: 14px;
+  }
+
+  button{
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+}
