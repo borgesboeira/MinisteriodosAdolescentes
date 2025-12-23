@@ -23,8 +23,12 @@ const BG_HOVER_RIGHT = Array.from({ length: 3 }, (_, i) => {
 
 const ROTATE_MS = 3500; // velocidade da troca
 
-const RANKING_BG_WEBP = `${BASE}img/world/ranking-bg.webp`;
 const RANKING_BG_PNG  = `${BASE}img/world/ranking-bg.png`;
+const RANKING_BG_WEBP = RANKING_BG_PNG;
+
+const PRE_RANKING_BG_PNG  = `${BASE}img/world/pre-ranking-bg.png`;
+const PRE_RANKING_BG_WEBP = PRE_RANKING_BG_PNG;
+
 
 
 
@@ -62,18 +66,59 @@ function saveJSON(key, value) {
   }
 }
 
+function useStoredState(storageKey, fallbackFactory) {
+  const getFallback = () =>
+    typeof fallbackFactory === "function" ? fallbackFactory() : fallbackFactory;
+
+  const [value, setValue] = useState(() => loadJSON(storageKey, getFallback()));
+  const lastKeyRef = useRef(storageKey);
+
+  // quando muda a chave (troca de grupo), carrega o conjunto certo
+  useEffect(() => {
+    setValue(loadJSON(storageKey, getFallback()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
+  // salva, mas NÃO salva o valor antigo na chave nova
+  useEffect(() => {
+    if (lastKeyRef.current !== storageKey) {
+      lastKeyRef.current = storageKey;
+      return;
+    }
+    saveJSON(storageKey, value);
+  }, [storageKey, value]);
+
+  return [value, setValue];
+}
+
+
 export default function App() {
   const [hoverSide, setHoverSide] = useState(null); // "left" | "right" | null
   const [route, setRoute] = useState("home"); // "home" | "ranking"
   const [rankBgReady, setRankBgReady] = useState(false);      // webp pronto
 const [rankPngReady, setRankPngReady] = useState(false);    // png pronto
+const [rankGroup, setRankGroup] = useState("teens"); // "teens" | "pre"
 
+const ACTIVE_RANK_WEBP = rankGroup === "pre" ? PRE_RANKING_BG_WEBP : RANKING_BG_WEBP;
+const ACTIVE_RANK_PNG  = rankGroup === "pre" ? PRE_RANKING_BG_PNG  : RANKING_BG_PNG;
+
+useEffect(() => {
+  setBulkMode(false);
+  setBulkMarks({});
+  setShowSettings(false);
+  setNewTeenName("");
+}, [rankGroup]);
+
+const STORE_PREFIX = rankGroup === "pre" ? "md_pre" : "md";
 
 
 useEffect(() => {
   let cancelled = false;
   let linkLow = null;
   let linkHigh = null;
+    
+  setRankBgReady(false);
+  setRankPngReady(false);
 
   async function setRatioFrom(src) {
     const img = new Image();
@@ -93,15 +138,15 @@ useEffect(() => {
   linkLow = document.createElement("link");
   linkLow.rel = "preload";
   linkLow.as = "image";
-  linkLow.href = RANKING_BG_WEBP;
+  linkLow.href = ACTIVE_RANK_WEBP;
   document.head.appendChild(linkLow);
 
   (async () => {
     // garante webp carregado e decodificado
-    const okWebp = await preloadAndDecode(RANKING_BG_WEBP, 2).catch(() => false);
+    const okWebp = await preloadAndDecode(ACTIVE_RANK_WEBP, 2).catch(() => false);
     if (cancelled) return;
 
-    if (okWebp) await setRatioFrom(RANKING_BG_WEBP);
+    if (okWebp) await setRatioFrom(ACTIVE_RANK_WEBP);
     setRankBgReady(true);
 
     // 2) Depois que o webp está ok, começa PNG (nítido) em “low priority”
@@ -109,13 +154,13 @@ useEffect(() => {
       linkHigh = document.createElement("link");
       linkHigh.rel = "preload";
       linkHigh.as = "image";
-      linkHigh.href = RANKING_BG_PNG;
+      linkHigh.href = ACTIVE_RANK_PNG;
       document.head.appendChild(linkHigh);
 
-      const okPng = await preloadAndDecode(RANKING_BG_PNG, 2).catch(() => false);
+      const okPng = await preloadAndDecode(ACTIVE_RANK_PNG, 2).catch(() => false);
       if (cancelled) return;
 
-      if (okPng) await setRatioFrom(RANKING_BG_PNG);
+      if (okPng) await setRatioFrom(ACTIVE_RANK_PNG);
       setRankPngReady(!!okPng);
     };
 
@@ -132,7 +177,8 @@ useEffect(() => {
     linkHigh?.remove();
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-}, []);
+}, [rankGroup]);
+
 
 useEffect(() => {
   if (route !== "ranking") return;
@@ -335,7 +381,16 @@ async function swapTo(src) {
 }
 
 useEffect(() => {
-  const all = [...BG_MAIN, ...BG_HOVER_LEFT, ...BG_HOVER_RIGHT, RANKING_BG_WEBP, RANKING_BG_PNG].filter(Boolean);
+  const all = [
+  ...BG_MAIN,
+  ...BG_HOVER_LEFT,
+  ...BG_HOVER_RIGHT,
+  RANKING_BG_WEBP,
+  RANKING_BG_PNG,
+  PRE_RANKING_BG_WEBP,
+  PRE_RANKING_BG_PNG,
+].filter(Boolean);
+
   all.forEach((src) => {
   preloadAndDecode(src, 2).catch(() => {});
 });
@@ -376,15 +431,18 @@ useEffect(() => {
 
 
   // dados (persistidos)
-  const [teens, setTeens] = useState(() => loadJSON("md_teens", DEFAULT_TEENS));
-  const [categoryPoints, setCategoryPoints] = useState(() => {
-    const saved = loadJSON("md_categoryPoints", null);
-    if (saved) return saved;
+  const [teens, setTeens] = useStoredState(`${STORE_PREFIX}_teens`, () => DEFAULT_TEENS);
+
+const [categoryPoints, setCategoryPoints] = useStoredState(
+  `${STORE_PREFIX}_categoryPoints`,
+  () => {
     const obj = {};
     for (const c of DEFAULT_CATEGORIES) obj[c.key] = c.defaultPoints;
     return obj;
-  });
-  const [scores, setScores] = useState(() => loadJSON("md_scores", {})); // { [id]: { [catKey]: number } }
+  }
+);
+
+const [scores, setScores] = useStoredState(`${STORE_PREFIX}_scores`, () => ({}));
 
   // UI
   const [bulkMode, setBulkMode] = useState(false);
@@ -419,12 +477,6 @@ useEffect(() => {
     setBulkMarks({});
     setShowSettings(false);
   }
-
-
-  // persistência
-  useEffect(() => saveJSON("md_teens", teens), [teens]);
-  useEffect(() => saveJSON("md_categoryPoints", categoryPoints), [categoryPoints]);
-  useEffect(() => saveJSON("md_scores", scores), [scores]);
 
   const categories = DEFAULT_CATEGORIES.map((c) => ({
     ...c,
@@ -588,14 +640,20 @@ useEffect(() => {
   <button
     className="optionLeft optionPremium"
     type="button"
-    onMouseEnter={() => setHoverSide("left")}
-    onMouseLeave={(e) => {
-      setHoverSide(null);
-      e.currentTarget.style.setProperty("--mx", "50%");
-      e.currentTarget.style.setProperty("--my", "50%");
-    }}
+    onMouseEnter={() => {
+  setHoverSide("left");
+  preloadAndDecode(PRE_RANKING_BG_WEBP, 2)
+    .then(() => preloadAndDecode(PRE_RANKING_BG_PNG, 1))
+    .catch(() => {});
+}}
     onMouseMove={setSpotlight}
-    onClick={() => alert("Pré-adolescentes: depois a gente cria essa tela também 😉")}
+    onClick={() => {
+  setHoverSide(null);
+  setRankGroup("pre");
+  setRoute("ranking");
+  window.scrollTo(0, 0);
+}}
+
   >
     <span className="optionSheen" aria-hidden="true" />
     <div className="optionTopRow">
@@ -654,9 +712,10 @@ useEffect(() => {
        <main
   className="rankPage"
   style={{
-    "--rankBgLow": `url(${RANKING_BG_WEBP})`,
-    "--rankBgHigh": `url(${RANKING_BG_PNG})`,
-  }}
+  "--rankBgLow": `url(${ACTIVE_RANK_WEBP})`,
+  "--rankBgHigh": `url(${ACTIVE_RANK_PNG})`,
+}}
+
 >
 
           <div className="rankTopBar">
