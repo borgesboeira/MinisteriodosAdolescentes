@@ -1,8 +1,18 @@
 import "./App.css";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { db } from "./lib/firebase";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { db, auth } from "./lib/firebase";
+import { doc, setDoc, onSnapshot, serverTimestamp, getDoc } from "firebase/firestore";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
 
+const ADMIN_EMAIL = import.meta.env.VITE_ADMIN_EMAIL;
+
+async function doLogout() {
+  await signOut(auth);
+}
 
 const BASE = import.meta.env.BASE_URL; // ex: "/" ou "/nome-do-repo/"
 
@@ -92,15 +102,44 @@ function useStoredState(storageKey, fallbackFactory) {
 }
 
 
+
 export default function App() {
   const [hoverSide, setHoverSide] = useState(null); // "left" | "right" | null
   const [route, setRoute] = useState("home"); // "home" | "ranking"
   const [rankBgReady, setRankBgReady] = useState(false);      // webp pronto
 const [rankPngReady, setRankPngReady] = useState(false);    // png pronto
 const [rankGroup, setRankGroup] = useState("teens"); // "teens" | "pre"
+const [newCategoryLabel, setNewCategoryLabel] = useState("");
+const [newCategoryPoints, setNewCategoryPoints] = useState(1);
+// dentro de export default function App() { ... }
+// onde você já tem outros useState
+const [user, setUser] = useState(null);
+const [showLogin, setShowLogin] = useState(false);
+
+// ADICIONE ISTO:
+const [adminPass, setAdminPass] = useState("");
+
+// e mantenha o loginError
+const [loginError, setLoginError] = useState("");
+const isAdmin = !!user;
+
 
 const ACTIVE_RANK_WEBP = rankGroup === "pre" ? PRE_RANKING_BG_WEBP : RANKING_BG_WEBP;
 const ACTIVE_RANK_PNG  = rankGroup === "pre" ? PRE_RANKING_BG_PNG  : RANKING_BG_PNG;
+
+useEffect(() => {
+  const unsub = onAuthStateChanged(auth, (u) => {
+    setUser(u || null);
+  });
+  return () => unsub();
+}, []);
+
+async function doLogout() {
+  await signOut(auth);
+  setBulkMode(false);
+  setBulkMarks({});
+  setShowSettings(false);
+}
 
 useEffect(() => {
   setBulkMode(false);
@@ -110,6 +149,92 @@ useEffect(() => {
 }, [rankGroup]);
 
 const STORE_PREFIX = rankGroup === "pre" ? "md_pre" : "md";
+
+
+function slugifyKey(label) {
+  return label
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+// (REMOVE COMPLETAMENTE)
+// agora isAdmin vem do Auth real:
+
+function addCategory() {
+  if (!isAdmin) return;
+
+  const label = newCategoryLabel.trim();
+  const pts = Number(newCategoryPoints || 0);
+
+  if (!label) return;
+
+  let keyBase = slugifyKey(label) || `cat_${Date.now()}`;
+  let key = keyBase;
+
+  // garantir key única
+  let i = 2;
+  while (categoriesConfig.some((c) => c.key === key)) {
+    key = `${keyBase}_${i++}`;
+  }
+
+  const nextCategories = [
+    ...categoriesConfig,
+    { key, label, defaultPoints: pts },
+  ];
+
+  const nextCategoryPoints = { ...(categoryPoints || {}), [key]: pts };
+
+  // garante que scores tenham essa chave (0 inicial)
+  const nextScores = { ...(scores || {}) };
+  for (const t of teens) {
+    nextScores[t.id] = { ...(nextScores[t.id] || {}) };
+    if (typeof nextScores[t.id][key] !== "number") nextScores[t.id][key] = 0;
+  }
+
+  setCategoriesConfig(nextCategories);
+  setCategoryPoints(nextCategoryPoints);
+  setScores(nextScores);
+
+  setNewCategoryLabel("");
+  setNewCategoryPoints(1);
+
+  saveRankingRemote(teens, nextCategories, nextCategoryPoints, nextScores);
+}
+
+function removeCategory(catKey) {
+  if (!isAdmin) return;
+
+  const cat = categoriesConfig.find((c) => c.key === catKey);
+  const name = cat?.label || catKey;
+
+  if (!window.confirm(`Excluir a categoria "${name}"?`)) return;
+  if (!window.confirm(`CONFIRMA EXCLUSÃO DEFINITIVA da categoria "${name}"?`)) return;
+
+  const nextCategories = categoriesConfig.filter((c) => c.key !== catKey);
+
+  // remove do categoryPoints
+  const nextCategoryPoints = { ...(categoryPoints || {}) };
+  delete nextCategoryPoints[catKey];
+
+  // remove de scores de todos
+  const nextScores = { ...(scores || {}) };
+  for (const teenId of Object.keys(nextScores)) {
+    if (nextScores[teenId]) {
+      const copy = { ...(nextScores[teenId] || {}) };
+      delete copy[catKey];
+      nextScores[teenId] = copy;
+    }
+  }
+
+  setCategoriesConfig(nextCategories);
+  setCategoryPoints(nextCategoryPoints);
+  setScores(nextScores);
+
+  saveRankingRemote(teens, nextCategories, nextCategoryPoints, nextScores);
+}
 
 
 useEffect(() => {
@@ -133,6 +258,7 @@ useEffect(() => {
       document.documentElement.style.setProperty("--rankBgRatio", String(ratio));
     }
   }
+
 
   // 1) Preload do WEBP (rápido)
   linkLow = document.createElement("link");
@@ -178,7 +304,6 @@ useEffect(() => {
   };
   // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [rankGroup]);
-
 
 useEffect(() => {
   if (route !== "ranking") return;
@@ -433,6 +558,12 @@ useEffect(() => {
   // dados (persistidos)
   const [teens, setTeens] = useStoredState(`${STORE_PREFIX}_teens`, () => DEFAULT_TEENS);
 
+const [categoriesConfig, setCategoriesConfig] = useStoredState(
+  `${STORE_PREFIX}_categoriesConfig`,
+  () => DEFAULT_CATEGORIES
+);
+
+
 const [categoryPoints, setCategoryPoints] = useStoredState(
   `${STORE_PREFIX}_categoryPoints`,
   () => {
@@ -443,6 +574,77 @@ const [categoryPoints, setCategoryPoints] = useStoredState(
 );
 
 const [scores, setScores] = useStoredState(`${STORE_PREFIX}_scores`, () => ({}));
+/* ---------- Firestore sync (insira aqui) ---------- */
+const saveTimerRef = useRef(null);
+const saveInProgressRef = useRef(false); // usaRef *dentro* do componente — CORRETO
+
+/**
+ * Troque isto por isto: salveRankingRemote(teens, categoryPoints, scores)
+ * - só grava quando isAdmin === true (você usa PIN)
+ * - debounce para evitar flood de writes
+ */
+function saveRankingRemote(nextTeens, nextCategoriesConfig, nextCategoryPoints, nextScores) {
+  if (!isAdmin) return; // só admins podem enviar mudanças
+
+  // limpa debounce anterior
+  if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+
+  // agenda gravação (debounce)
+  saveTimerRef.current = setTimeout(async () => {
+    saveInProgressRef.current = true; // sinaliza que estamos gravando (para onSnapshot ignorar)
+    try {
+      await setDoc(
+        doc(db, "rankings", rankGroup),
+        {
+          teens: Array.isArray(nextTeens) ? nextTeens : [],
+          categoriesConfig: Array.isArray(nextCategoriesConfig) ? nextCategoriesConfig : [],
+          categoryPoints: nextCategoryPoints || {},
+          scores: nextScores || {},
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+      // opcional: console.log("Ranking salvo no Firestore");
+    } catch (err) {
+      console.error("Erro salvando no Firestore:", err);
+    } finally {
+      // mantemos o flag true por um curtíssimo tempo para evitar race com o snapshot
+      setTimeout(() => {
+        saveInProgressRef.current = false;
+      }, 250);
+    }
+  }, 300); // debounce 300ms
+}
+
+/**
+ * Live listener: quando o documento remoto mudar, atualiza estados locais.
+ * Coloquei rankGroup como doc id (teens | pre).
+ */
+useEffect(() => {
+  const ref = doc(db, "rankings", rankGroup);
+
+  const unsub = onSnapshot(
+    ref,
+    (snap) => {
+      if (saveInProgressRef.current) return; // ignora updates causados pelo próprio setDoc
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (Array.isArray(data.categoriesConfig)) setCategoriesConfig(data.categoriesConfig);
+      if (Array.isArray(data.teens)) setTeens(data.teens);
+      if (data.categoryPoints) setCategoryPoints(data.categoryPoints);
+      if (data.scores) setScores(data.scores);
+    },
+    (err) => {
+      console.error("Erro no onSnapshot:", err);
+    }
+  );
+
+  return () => unsub();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [rankGroup]);
+
+/* ---------- fim Firestore sync ---------- */
+
 
   // UI
   const [bulkMode, setBulkMode] = useState(false);
@@ -450,38 +652,37 @@ const [scores, setScores] = useStoredState(`${STORE_PREFIX}_scores`, () => ({}))
   const [showSettings, setShowSettings] = useState(false);
   const [newTeenName, setNewTeenName] = useState("");
 
-    // ===== Admin (login simples por PIN) =====
-  const ADMIN_PIN = String(import.meta.env.VITE_ADMIN_PIN || "1234");
+useEffect(() => {
+  console.log("[DEBUG] isAdmin:", isAdmin, "showSettings:", showSettings, "bulkMode:", bulkMode);
+  console.log("[DEBUG] categoriesConfig:", categoriesConfig);
+}, [isAdmin, showSettings, bulkMode, categoriesConfig]);
 
-  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem("md_isAdmin") === "1");
-  const [showLogin, setShowLogin] = useState(false);
-  const [pin, setPin] = useState("");
-  const [pinError, setPinError] = useState("");
 
-  function doLogin() {
-    if (pin.trim() === ADMIN_PIN) {
-      setIsAdmin(true);
-      localStorage.setItem("md_isAdmin", "1");
-      setShowLogin(false);
-      setPin("");
-      setPinError("");
-      return;
-    }
-    setPinError("PIN incorreto.");
+  async function doLogin() {
+  setLoginError("");
+  try {
+    await signInWithEmailAndPassword(auth, ADMIN_EMAIL, adminPass);
+    setShowLogin(false);
+    setAdminPass("");
+  } catch (err) {
+    console.error(err);
+    setLoginError("Senha incorreta.");
   }
+}
 
-  function doLogout() {
-    setIsAdmin(false);
-    localStorage.removeItem("md_isAdmin");
-    setBulkMode(false);
-    setBulkMarks({});
-    setShowSettings(false);
-  }
+  async function doLogout() {
+  await signOut(auth);
+  setBulkMode(false);
+  setBulkMarks({});
+  setShowSettings(false);
+}
 
-  const categories = DEFAULT_CATEGORIES.map((c) => ({
-    ...c,
-    points: Number(categoryPoints[c.key] ?? c.defaultPoints),
-  }));
+
+ const categories = categoriesConfig.map((c) => ({
+  ...c,
+  points: Number(categoryPoints[c.key] ?? c.defaultPoints),
+}));
+
 
   function getTeenScoreByCategory(teenId, catKey) {
     return Number(scores?.[teenId]?.[catKey] ?? 0);
@@ -510,31 +711,57 @@ const [scores, setScores] = useStoredState(`${STORE_PREFIX}_scores`, () => ({}))
   }
 
   function addTeen() {
-    const name = newTeenName.trim();
-    if (!name) return;
-    const id = `t_${Date.now()}`;
-    setTeens((prev) => [...prev, { id, name }]);
-    setNewTeenName("");
-    // cria estrutura de pontuação
-    setScores((prev) => ({
-      ...(prev || {}),
-      [id]: Object.fromEntries(categories.map((c) => [c.key, 0])),
-    }));
-  }
+  if (!isAdmin) return;
+
+  const name = newTeenName.trim();
+  if (!name) return;
+  const id = `t_${Date.now()}`;
+
+  const nextTeens = [...teens, { id, name }];
+
+  const nextScores = {
+    ...(scores || {}),
+    [id]: Object.fromEntries(categories.map((c) => [c.key, 0])),
+  };
+
+  setTeens(nextTeens);
+  setScores(nextScores);
+  setNewTeenName("");
+
+  // salva remoto
+  saveRankingRemote(nextTeens, categoriesConfig, categoryPoints, nextScores);
+}
+
 
   function removeTeen(id) {
-    setTeens((prev) => prev.filter((t) => t.id !== id));
-    setScores((prev) => {
-      const next = { ...(prev || {}) };
-      delete next[id];
-      return next;
-    });
-    setBulkMarks((prev) => {
-      const next = { ...(prev || {}) };
-      delete next[id];
-      return next;
-    });
-  }
+  if (!isAdmin) return;
+
+  const teen = teens.find((t) => t.id === id);
+  const teenName = teen?.name || "este adolescente";
+
+  // Confirmação 1
+  if (!window.confirm(`Excluir ${teenName}?`)) return;
+
+  // Confirmação 2 (mais enfática)
+  if (!window.confirm(`CONFIRMA EXCLUSÃO DEFINITIVA de ${teenName}?`)) return;
+
+  const nextTeens = teens.filter((t) => t.id !== id);
+
+  const nextScores = { ...(scores || {}) };
+  delete nextScores[id];
+
+  setTeens(nextTeens);
+  setScores(nextScores);
+
+  setBulkMarks((prev) => {
+    const next = { ...(prev || {}) };
+    delete next[id];
+    return next;
+  });
+
+  saveRankingRemote(nextTeens, categoriesConfig, categoryPoints, nextScores);
+}
+
 
   function toggleBulkMark(teenId, catKey) {
     setBulkMarks((prev) => {
@@ -546,35 +773,43 @@ const [scores, setScores] = useStoredState(`${STORE_PREFIX}_scores`, () => ({}))
   }
 
   function applyBulkPoints() {
-    // soma pontos padrão por categoria marcada
-    setScores((prev) => {
-      const next = { ...(prev || {}) };
+  if (!isAdmin) return;
 
-      for (const t of teens) {
-        const marks = bulkMarks?.[t.id];
-        if (!marks) continue;
+  const nextScores = { ...(scores || {}) };
 
-        next[t.id] = { ...(next[t.id] || {}) };
+  for (const t of teens) {
+    const marks = bulkMarks?.[t.id];
+    if (!marks) continue;
 
-        for (const c of categories) {
-          if (marks[c.key]) {
-            next[t.id][c.key] = Number(next[t.id][c.key] || 0) + Number(c.points || 0);
-          }
-        }
+    nextScores[t.id] = { ...(nextScores[t.id] || {}) };
+
+    for (const c of categories) {
+      if (marks[c.key]) {
+        nextScores[t.id][c.key] =
+          Number(nextScores[t.id][c.key] || 0) + Number(c.points || 0);
       }
-      return next;
-    });
-
-    // limpa seleção e sai do modo
-    setBulkMarks({});
-    setBulkMode(false);
+    }
   }
+
+  setScores(nextScores);
+
+  setBulkMarks({});
+  setBulkMode(false);
+
+  saveRankingRemote(teens, categoriesConfig, categoryPoints, nextScores);
+}
+
 
   function resetAllScores() {
-    setScores({});
-    setBulkMarks({});
-    setBulkMode(false);
-  }
+  if (!isAdmin) return;
+
+  const empty = {};
+  setScores(empty);
+  setBulkMarks({});
+  setBulkMode(false);
+  saveRankingRemote(teens, categoriesConfig, categoryPoints, empty);
+}
+
 
   /** ====== UI pages ====== */
   return (
@@ -735,25 +970,24 @@ const [scores, setScores] = useStoredState(`${STORE_PREFIX}_scores`, () => ({}))
 
       <div className="settingsGrid">
         <div className="settingsRow" style={{ gridTemplateColumns: "1fr" }}>
-          <div className="settingsLabel">Digite o PIN</div>
+          <div className="settingsLabel">Senha do Administrador</div>
 
-          <input
-            className="numInput"
-            type="password"
-            inputMode="numeric"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") doLogin();
-            }}
-            placeholder="••••"
-          />
+<input
+  className="textInput"
+  type="password"
+  value={adminPass}
+  onChange={(e) => setAdminPass(e.target.value)}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") doLogin();
+  }}
+  placeholder="••••••••"
+/>
 
-          {pinError ? (
-            <div style={{ color: "rgba(255,140,140,.95)", fontSize: 13 }}>
-              {pinError}
-            </div>
-          ) : null}
+{loginError ? (
+  <div style={{ color: "rgba(255,140,140,.95)", fontSize: 13 }}>
+    {loginError}
+  </div>
+) : null}
         </div>
       </div>
 
@@ -823,24 +1057,74 @@ const [scores, setScores] = useStoredState(`${STORE_PREFIX}_scores`, () => ({}))
       </button>
     </div>
 
+<div className="addTeenRow" style={{ borderTop: "1px solid rgba(255,255,255,.10)" }}>
+  <input
+    className="textInput"
+    placeholder="Nova categoria (ex: Visita Missionária)"
+    value={newCategoryLabel}
+    onChange={(e) => setNewCategoryLabel(e.target.value)}
+  />
+
+  <input
+    className="numInput"
+    type="number"
+    value={newCategoryPoints}
+    onChange={(e) => setNewCategoryPoints(Number(e.target.value))}
+    style={{ maxWidth: 120 }}
+  />
+
+  <button className="smallBtn smallBtnPrimary" type="button" onClick={addCategory}>
+    Adicionar
+  </button>
+</div>
+
+
+    <div className="settingsInline"></div>
+
     <div className="settingsGrid">
-      {categories.map((c) => (
-        <div key={c.key} className="settingsRow">
-          <div className="settingsLabel">{c.label}</div>
-          <input
-            className="numInput"
-            type="number"
-            value={categoryPoints[c.key] ?? c.defaultPoints}
-            onChange={(e) =>
-              setCategoryPoints((prev) => ({
-                ...(prev || {}),
-                [c.key]: Number(e.target.value),
-              }))
-            }
-          />
-        </div>
-      ))}
+  {categories.map((c) => (
+    <div key={c.key} className="settingsRow" style={{ gridTemplateColumns: "1fr 120px 90px" }}>
+      {/* editar label */}
+      <input
+        className="textInput"
+        value={c.label}
+        onChange={(e) => {
+          const label = e.target.value;
+
+          setCategoriesConfig((prev) => {
+            const next = prev.map((x) => (x.key === c.key ? { ...x, label } : x));
+            saveRankingRemote(teens, next, categoryPoints, scores);
+            return next;
+          });
+        }}
+      />
+
+      {/* editar pontos */}
+      <input
+        className="numInput"
+        type="number"
+        value={categoryPoints[c.key] ?? c.defaultPoints}
+        onChange={(e) => {
+          const val = Number(e.target.value);
+          setCategoryPoints((prev) => {
+            const next = { ...(prev || {}), [c.key]: val };
+            saveRankingRemote(teens, categoriesConfig, next, scores);
+            return next;
+          });
+        }}
+      />
+
+      {/* remover */}
+      <button
+        className="tinyBtn dangerBtn"
+        type="button"
+        onClick={() => removeCategory(c.key)}
+      >
+        remover
+      </button>
     </div>
+  ))}
+</div>
   </div>
 )}
 
@@ -957,9 +1241,15 @@ const [scores, setScores] = useStoredState(`${STORE_PREFIX}_scores`, () => ({}))
 }
 
 async function testFirestore() {
-  const ref = doc(db, "debug", "hello");
-  await setDoc(ref, { msg: "salve do Firestore", at: Date.now() });
-
-  const snap = await getDoc(ref);
-  console.log("Firestore leu:", snap.data());
+  try {
+    const ref = doc(db, "debug", "hello");
+    await setDoc(ref, { msg: "salve do Firestore", at: Date.now() });
+    const snap = await getDoc(ref);
+    console.log("Firestore leu:", snap.data());
+    alert("Teste Firestore concluído. Veja console.");
+  } catch (err) {
+    console.error("Erro no testFirestore:", err);
+    alert("Erro no teste. Veja console.");
+  }
 }
+
